@@ -1,0 +1,9 @@
+Cosas a implementar 
+1 buen control los reles
+    rele de la segunda lampara 
+    rele de cooler
+    
+
+
+Cosas a mejorar 
+2 declamiento de reles 

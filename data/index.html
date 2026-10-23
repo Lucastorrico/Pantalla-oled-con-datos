@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Control de temperatura</title>
+  <style>
+    :root{color-scheme:light;--fondo:#eef2f6;--panel:#fff;--texto:#1f2937;
+      --suave:#6b7280;--borde:#dbe2ea;--naranja:#e05a33;--verde:#16803a;
+      --rojo:#b42318;--azul:#2563eb}
+    *{box-sizing:border-box}body{font-family:Arial,sans-serif;background:var(--fondo);
+      color:var(--texto);margin:0;padding:18px}.contenedor{max-width:1050px;margin:auto}
+    h1{font-size:1.55rem;margin:6px 0 18px}h2{font-size:1.1rem;margin:0 0 14px}
+    .rejilla{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .panel{background:var(--panel);border-radius:16px;padding:18px;
+      box-shadow:0 8px 24px #00000012;margin-bottom:14px}
+    .tarjeta{text-align:center}.etiqueta{font-size:.78rem;color:var(--suave);
+      text-transform:uppercase;letter-spacing:.05em}.valor{font-size:1.35rem;
+      font-weight:700;margin-top:8px}.temperatura{font-size:2.5rem;color:var(--naranja)}
+    .estado{display:inline-block;padding:8px 12px;border-radius:9px;font-weight:700}
+    .encendido{background:#dcfce7;color:#166534}.apagado{background:#fee2e2;color:#991b1b}
+    .error{background:#fef3c7;color:#92400e}.barra{display:flex;gap:8px;
+      align-items:center;flex-wrap:wrap;margin-bottom:10px}button{border:0;border-radius:8px;
+      padding:9px 13px;background:var(--azul);color:white;font-weight:700;cursor:pointer}
+    button.peligro{background:#b42318}button.activo{outline:3px solid #bfdbfe}
+    canvas{display:block;width:100%;height:300px;border:1px solid var(--borde);
+      border-radius:10px;background:#fff}.detalle{font-size:.86rem;color:var(--suave);margin-top:8px}
+    .formularios{display:grid;grid-template-columns:1fr 1fr;gap:14px}form{display:grid;gap:9px}
+    label{font-size:.85rem;color:var(--suave)}input,select{width:100%;padding:10px;
+      border:1px solid var(--borde);border-radius:8px;font-size:1rem}table{width:100%;
+      border-collapse:collapse;font-size:.88rem}th,td{text-align:left;padding:8px;
+      border-bottom:1px solid var(--borde)}th{color:var(--suave)}.fila-alerta td{
+      color:#b42318;font-weight:700;background:#fff1f2}.mensaje{min-height:1.2em;
+      font-size:.88rem;color:var(--azul)}details summary{cursor:pointer;font-weight:700}
+    .sin-datos{color:var(--suave);padding:14px 0}
+    @media(max-width:760px){.rejilla{grid-template-columns:1fr 1fr}.formularios{grid-template-columns:1fr}}
+    @media(max-width:430px){.rejilla{grid-template-columns:1fr}.temperatura{font-size:2.2rem}}
+  </style>
+</head>
+<body>
+<main class="contenedor">
+  <h1>Control de temperatura</h1>
+
+  <section class="rejilla">
+    <div class="panel tarjeta"><div class="etiqueta">Temperatura</div>
+      <div><span id="temperatura" class="valor temperatura">--.-</span> &deg;C</div></div>
+    <div class="panel tarjeta"><div class="etiqueta">Rele</div>
+      <div id="rele" class="estado error">Esperando</div></div>
+    <div class="panel tarjeta"><div class="etiqueta">Fecha y hora</div>
+      <div id="hora" class="valor">Sin sincronizar</div></div>
+    <div class="panel tarjeta"><div class="etiqueta">Conexion</div>
+      <div id="conexion" class="valor">--</div><div id="ip" class="detalle"></div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Grafico de temperatura</h2>
+    <div class="barra">
+      <button type="button" data-rango="86400" class="rango activo">24 horas</button>
+      <button type="button" data-rango="604800" class="rango">7 dias</button>
+      <button type="button" data-rango="1209600" class="rango">14 dias</button>
+      <button type="button" data-rango="1814400" class="rango">21 dias</button>
+      <button type="button" data-rango="0" class="rango">Maximo</button>
+      <span id="cantidad" class="detalle"></span>
+    </div>
+    <canvas id="grafico"></canvas>
+    <div class="detalle">Linea verde: enciende a <span id="textoEncendido">37,0</span> &deg;C.
+      Linea roja: apaga a <span id="textoApagado">37,7</span> &deg;C.</div>
+  </section>
+
+  <section class="panel">
+    <h2>Ultimos eventos y alertas</h2>
+    <div id="sinEventos" class="sin-datos">Todavia no hay eventos.</div>
+    <div style="overflow:auto"><table id="tablaEventos" hidden>
+      <thead><tr><th>Fecha y hora</th><th>Evento</th><th>Temperatura</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>Configuracion</summary>
+      <div class="formularios" style="margin-top:16px">
+        <form id="wifiForm">
+          <h2>WiFi para Internet y fecha/hora</h2>
+          <label>Nombre de la red (SSID)<input name="ssid" id="ssid" required maxlength="32"></label>
+          <label>Contrasena<input name="clave" type="password" maxlength="63" placeholder="Vacia conserva la clave si no cambia el SSID"></label>
+          <button type="submit">Guardar WiFi y reiniciar</button>
+          <div id="wifiMensaje" class="mensaje"></div>
+        </form>
+
+        <form id="registroForm">
+          <h2>Intervalos del historial</h2>
+          <label>Dentro del rango normal (minutos)
+            <input name="dentro" id="dentro" type="number" min="1" max="60" required></label>
+          <label>Fuera del rango (segundos)
+            <input name="fuera" id="fuera" type="number" min="10" max="600" required></label>
+          <label>Cantidad maxima de muestras
+            <select name="limite" id="limiteMuestras">
+              <option value="4032">4032 muestras</option>
+              <option value="6000">6000 muestras</option>
+            </select></label>
+          <button type="submit">Guardar historial</button>
+          <div id="capacidad" class="detalle"></div>
+          <div id="registroMensaje" class="mensaje"></div>
+        </form>
+
+        <form id="temperaturaForm">
+          <h2>Temperaturas del rele</h2>
+          <label>Encender el rele a esta temperatura o menos (&deg;C)
+            <input name="encendido" id="tempEncendido" type="number" min="-40" max="79.9"
+              step="0.1" required></label>
+          <label>Apagar el rele a esta temperatura o mas (&deg;C)
+            <input name="apagado" id="tempApagado" type="number" min="-39.9" max="80"
+              step="0.1" required></label>
+          <button type="submit">Guardar temperaturas</button>
+          <div class="detalle">La temperatura de encendido debe ser menor que la de apagado.</div>
+          <div id="temperaturaMensaje" class="mensaje"></div>
+        </form>
+      </div>
+      <div style="margin-top:18px">
+        <button type="button" id="borrar" class="peligro">Borrar historial y eventos</button>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script>
+  let historial=[];
+  let rangoActual=86400;
+  let configuracionCargada=false;
+  let tempEncendido=37.0;
+  let tempApagado=37.7;
+  let limiteActual=4032;
+  let versionEventos=-1;
+  let ajustandoHora=false;
+
+  function fecha(epoch){
+    if(!epoch) return 'Hora pendiente';
+    return new Date(epoch*1000).toLocaleString('es-AR');
+  }
+
+  async function sincronizarHoraNavegador(){
+    if(ajustandoHora)return;
+    ajustandoHora=true;
+    try{await fetch('/ajustar-hora',{method:'POST',body:new URLSearchParams({
+      epoch:String(Math.floor(Date.now()/1000))})});}
+    catch(error){}
+    setTimeout(()=>ajustandoHora=false,5000);
+  }
+
+  async function actualizarDatos(){
+    try{
+      const respuesta=await fetch('/datos',{cache:'no-store'});
+      const d=await respuesta.json();
+      const temp=document.getElementById('temperatura');
+      const rele=document.getElementById('rele');
+      if(d.ok){
+        temp.textContent=Number(d.temperatura).toFixed(1);
+        rele.textContent=d.rele?'ENCENDIDO':'APAGADO';
+        rele.className='estado '+(d.rele?'encendido':'apagado');
+      }else{
+        temp.textContent='--.-';
+        rele.textContent='Error DHT22';
+        rele.className='estado error';
+      }
+      document.getElementById('hora').textContent=d.hora;
+      document.getElementById('conexion').textContent=d.modo+' - '+d.ssid;
+      document.getElementById('ip').textContent=d.ip;
+      limiteActual=Number(d.limiteMuestras)||4032;
+      if(!d.horaValida)sincronizarHoraNavegador();
+      if(Number(d.versionEventos)!==versionEventos){
+        versionEventos=Number(d.versionEventos);cargarEventos();cargarHistorial();
+      }
+      const nuevoEncendido=Number(d.temperaturaEncendido);
+      const nuevoApagado=Number(d.temperaturaApagado);
+      const cambiaronUmbrales=nuevoEncendido!==tempEncendido||nuevoApagado!==tempApagado;
+      tempEncendido=nuevoEncendido;tempApagado=nuevoApagado;
+      document.getElementById('textoEncendido').textContent=tempEncendido.toFixed(1).replace('.',',');
+      document.getElementById('textoApagado').textContent=tempApagado.toFixed(1).replace('.',',');
+      if(!configuracionCargada){
+        document.getElementById('ssid').value=d.ssidConfigurado;
+        document.getElementById('dentro').value=Math.round(d.intervaloDentro/60);
+        document.getElementById('fuera').value=d.intervaloFuera;
+        document.getElementById('limiteMuestras').value=String(d.limiteMuestras);
+        document.getElementById('tempEncendido').value=tempEncendido.toFixed(1);
+        document.getElementById('tempApagado').value=tempApagado.toFixed(1);
+        mostrarCapacidad();configuracionCargada=true;
+      }
+      if(cambiaronUmbrales&&historial.length)dibujarGrafico();
+    }catch(error){document.getElementById('conexion').textContent='Sin respuesta';}
+  }
+
+  async function cargarHistorial(){
+    try{historial=await (await fetch('/historial',{cache:'no-store'})).json();dibujarGrafico();}
+    catch(error){document.getElementById('cantidad').textContent='No se pudo cargar el historial';}
+  }
+
+  function dibujarGrafico(){
+    const canvas=document.getElementById('grafico');
+    const ancho=Math.max(300,canvas.clientWidth),alto=300,escala=window.devicePixelRatio||1;
+    canvas.width=ancho*escala;canvas.height=alto*escala;
+    const ctx=canvas.getContext('2d');ctx.scale(escala,escala);ctx.clearRect(0,0,ancho,alto);
+    const margen={i:48,d:16,a:18,b:35};let puntos=historial.filter(p=>p.t>0);
+    const ultimoConHora=[...historial].reverse().find(p=>p.t>0);
+    if(rangoActual&&ultimoConHora){const desde=ultimoConHora.t-rangoActual;
+      puntos=historial.filter(p=>p.t>=desde);}
+    document.getElementById('cantidad').textContent=puntos.length+' / '+limiteActual+' muestras';
+    if(puntos.length<2){ctx.fillStyle='#6b7280';ctx.font='14px Arial';
+      ctx.fillText('Esperando datos suficientes...',55,145);return;}
+    let minimo=Math.min(tempEncendido,...puntos.map(p=>p.v));
+    let maximo=Math.max(tempApagado,...puntos.map(p=>p.v));
+    const relleno=Math.max(.4,(maximo-minimo)*.12);minimo-=relleno;maximo+=relleno;
+    const x0=margen.i,x1=ancho-margen.d,y0=margen.a,y1=alto-margen.b;
+    const x=i=>x0+(i/(puntos.length-1))*(x1-x0);
+    const y=v=>y1-((v-minimo)/(maximo-minimo))*(y1-y0);
+    ctx.strokeStyle='#dbe2ea';ctx.lineWidth=1;ctx.fillStyle='#6b7280';ctx.font='11px Arial';
+    for(let i=0;i<=4;i++){const valor=minimo+(maximo-minimo)*i/4,py=y(valor);
+      ctx.beginPath();ctx.moveTo(x0,py);ctx.lineTo(x1,py);ctx.stroke();ctx.fillText(valor.toFixed(1),4,py+4);}
+    function umbral(valor,color,texto){const py=y(valor);ctx.strokeStyle=color;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(x0,py);ctx.lineTo(x1,py);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle=color;ctx.fillText(texto,x0+5,py-4);}
+    umbral(tempEncendido,'#16803a',tempEncendido.toFixed(1).replace('.',','));
+    umbral(tempApagado,'#b42318',tempApagado.toFixed(1).replace('.',','));
+    ctx.strokeStyle='#e05a33';ctx.lineWidth=2;ctx.beginPath();
+    puntos.forEach((p,i)=>{const px=x(i),py=y(p.v);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)});ctx.stroke();
+    ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText(fecha(puntos[0].t),x0,y1+22);
+    ctx.textAlign='right';ctx.fillText(fecha(puntos[puntos.length-1].t),x1,y1+22);ctx.textAlign='left';
+  }
+
+  async function cargarEventos(){
+    try{const lista=await (await fetch('/eventos',{cache:'no-store'})).json();
+      const tabla=document.getElementById('tablaEventos'),cuerpo=tabla.querySelector('tbody');cuerpo.textContent='';
+      document.getElementById('sinEventos').hidden=lista.length>0;tabla.hidden=lista.length===0;
+      lista.slice().reverse().forEach(e=>{const fila=document.createElement('tr');
+        if(e.tipo===3||e.tipo===4)fila.className='fila-alerta';
+        [fecha(e.t),e.evento,Number(e.v).toFixed(1)+' °C'].forEach(valor=>{
+          const celda=document.createElement('td');celda.textContent=valor;fila.appendChild(celda);});
+        cuerpo.appendChild(fila);});}catch(error){}
+  }
+
+  function mostrarCapacidad(){
+    const dentro=Math.max(1,Number(document.getElementById('dentro').value)||5);
+    const fuera=Math.max(10,Number(document.getElementById('fuera').value)||60);
+    const limite=Number(document.getElementById('limiteMuestras').value)||4032;
+    document.getElementById('capacidad').textContent='Capacidad aproximada: '+
+      (limite*dentro/1440).toFixed(1)+' dias dentro del rango o '+
+      (limite*fuera/3600).toFixed(1)+' horas fuera del rango.';
+  }
+
+  document.querySelectorAll('.rango').forEach(boton=>boton.onclick=()=>{
+    document.querySelectorAll('.rango').forEach(b=>b.classList.remove('activo'));
+    boton.classList.add('activo');rangoActual=Number(boton.dataset.rango);dibujarGrafico();});
+  window.addEventListener('resize',dibujarGrafico);
+  document.getElementById('dentro').addEventListener('input',mostrarCapacidad);
+  document.getElementById('fuera').addEventListener('input',mostrarCapacidad);
+  document.getElementById('limiteMuestras').addEventListener('change',mostrarCapacidad);
+
+  document.getElementById('wifiForm').onsubmit=async evento=>{
+    evento.preventDefault();const mensaje=document.getElementById('wifiMensaje');mensaje.textContent='Guardando...';
+    try{const r=await fetch('/wifi',{method:'POST',body:new URLSearchParams(new FormData(evento.target))});
+      mensaje.textContent=await r.text();}catch(error){mensaje.textContent='El ESP32 se esta reiniciando. Volve a conectarte en unos segundos.';}};
+
+  document.getElementById('registroForm').onsubmit=async evento=>{
+    evento.preventDefault();const mensaje=document.getElementById('registroMensaje');mensaje.textContent='Guardando...';
+    const r=await fetch('/config-registro',{method:'POST',body:new URLSearchParams(new FormData(evento.target))});
+    mensaje.textContent=await r.text();mostrarCapacidad();};
+
+  document.getElementById('temperaturaForm').onsubmit=async evento=>{
+    evento.preventDefault();const mensaje=document.getElementById('temperaturaMensaje');mensaje.textContent='Guardando...';
+    try{const r=await fetch('/config-temperatura',{method:'POST',body:new URLSearchParams(new FormData(evento.target))});
+      mensaje.textContent=await r.text();
+      if(r.ok){await actualizarDatos();await cargarHistorial();await cargarEventos();}}
+    catch(error){mensaje.textContent='No se pudo guardar la configuracion.';}};
+
+  document.getElementById('borrar').onclick=async()=>{
+    if(!confirm('¿Borrar todo el historial y los eventos guardados?'))return;
+    await fetch('/borrar-registros',{method:'POST'});historial=[];dibujarGrafico();cargarEventos();};
+
+  actualizarDatos();cargarHistorial();cargarEventos();
+  setInterval(actualizarDatos,2500);setInterval(cargarEventos,30000);setInterval(cargarHistorial,300000);
+</script>
+</body>
+</html>
